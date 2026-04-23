@@ -2,7 +2,7 @@
 
 A thin client over `psycopg2` for Databricks Lakebase Autoscaling Postgres. Picks an auth mode, manages a pooled connection, refreshes OAuth tokens automatically, and exposes three query methods: `execute` (DDL/DML), `select` (Spark DataFrame), `fetch` (raw tuples).
 
-Source: `src/lakebase_connect.py`.
+Source: `src/lakebase_utils/lakebase_connect.py`.
 
 ## Install
 
@@ -19,7 +19,7 @@ If you want `select()` to return a Spark DataFrame outside a Databricks notebook
 ## Quick start
 
 ```python
-from lakebase_connect import LakebaseAutoscalingClient
+from lakebase_utils.lakebase_connect import LakebaseAutoscalingClient
 
 with LakebaseAutoscalingClient(
     host="ep-xxxx.database.eastus2.azuredatabricks.net",
@@ -224,7 +224,7 @@ Bump `maxconn` at construction. The pool is thread-safe (`ThreadedConnectionPool
 ### 1. Read a table into a Spark DataFrame (notebook)
 
 ```python
-from lakebase_connect import LakebaseAutoscalingClient
+from lakebase_utils.lakebase_connect import LakebaseAutoscalingClient
 
 client = LakebaseAutoscalingClient(
     auth_mode="user_oauth",
@@ -276,7 +276,7 @@ with LakebaseAutoscalingClient(
 
 ```python
 import os
-from lakebase_connect import LakebaseAutoscalingClient
+from lakebase_utils.lakebase_connect import LakebaseAutoscalingClient
 
 with LakebaseAutoscalingClient(
     host="ep-xxxx.database.eastus2.azuredatabricks.net",
@@ -326,8 +326,9 @@ The pool is `psycopg2.pool.ThreadedConnectionPool` — thread-safe, grows on dem
 
 ## Related files
 
-- `src/lakebase_connect.py` — the module.
-- `src/lakebase_api.py` — separate HTTP client for the Lakebase Data API (PostgREST). Different auth story; see `FIX_DATA_API_AUTH.md`.
+- `src/lakebase_utils/lakebase_connect.py` — the module.
+- `src/lakebase_utils/lakebase_api.py` — separate HTTP client for the Lakebase Data API (PostgREST). Different auth story; see `docs/fix_data_api_auth.md`.
 - `src/create_widgets.sql` — sample DDL used by `execute` examples.
 - `src/provision_data_api_role.sql` — template for provisioning Data API identities.
-- `test_user_oauth.py` — runnable smoke test for `user_oauth` mode.
+- `src/test_user_oauth.py` — runnable smoke test for `user_oauth` mode.
+- `src/test_oauth_user.py` — runnable smoke test for `oauth_token` mode.

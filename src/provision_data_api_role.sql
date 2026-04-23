@@ -5,6 +5,13 @@
 -- (owners have DDL rights, even though they themselves can't use the Data
 -- API — `authenticator` can't assume an elevated role).
 --
+-- IMPORTANT: DO NOT provision the identity via the Lakebase UI's
+-- `Roles & Databases → Add Role → OAuth` flow. UI-created roles do not
+-- grant the project owner ADMIN OPTION, so the `GRANT "<identity>" TO
+-- authenticator` below will fail with SQLSTATE 42501. Always provision via
+-- this SQL path — `databricks_create_role()` additionally grants the caller
+-- ADMIN on the new role, which is what makes the follow-up GRANT work.
+--
 -- Replace <IDENTITY> with either:
 --   * a user's email (e.g. alice@example.com), when using 'USER' below, or
 --   * a service principal's application id (UUID), when using 'SERVICE_PRINCIPAL'.

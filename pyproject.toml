@@ -1,0 +1,12 @@
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "unit: Unit tests (no network, no auth)",
+    "integration: Integration tests (require LAKEBASE_API_URL + Databricks auth)",
+    "slow: Long-running tests",
+]
+filterwarnings = [
+    "ignore::DeprecationWarning:aiohttp.*",
+]

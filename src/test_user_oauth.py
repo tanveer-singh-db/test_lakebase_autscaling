@@ -23,7 +23,7 @@ from urllib.parse import unquote, urlparse
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
-from lakebase_connect import LakebaseAutoscalingClient  # noqa: E402
+from src.lakebase_utils.lakebase_connect import LakebaseAutoscalingClient  # noqa: E402
 
 
 def _parse(url: str) -> dict:

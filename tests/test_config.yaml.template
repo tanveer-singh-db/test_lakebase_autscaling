@@ -1,0 +1,69 @@
+# ============================================================================
+# Test Configuration Template — Lakebase integration tests
+# ============================================================================
+# Copy this file to `test_config.yaml` and fill in the values for your
+# Lakebase project, or set the equivalent env vars. Values in this file are
+# plain defaults; env vars always win.
+#
+# Usage:
+#   cp tests/test_config.yaml.template tests/test_config.yaml
+#   # then edit `api_url` below, or set LAKEBASE_API_URL in your shell
+#   pytest tests/integration/ -v
+#
+# tests/test_config.yaml is git-ignored so you don't accidentally commit
+# workspace-specific URLs.
+# ============================================================================
+
+lakebase:
+  # Full Data API base URL.
+  #   https://<lakebase-host>/api/2.0/workspace/<workspace-id>/rest/<database>
+  # Copy from: Lakebase project → Data API → API URL.
+  # [UPDATE] or override via the LAKEBASE_API_URL env var.
+  api_url: ""
+
+  # Schema + table used by the live smoke tests to verify reads.
+  # Must be a schema that's exposed in Data API → Settings → Exposed schemas,
+  # and a table the authenticated identity has SELECT on.
+  # `public.databricks_list_roles` is a built-in view that works as a probe
+  # once the identity is provisioned — no extra DDL required.
+  probe_schema: "public"
+  probe_table: "databricks_list_roles"
+
+auth:
+  # Databricks CLI profile from `~/.databrickscfg`. Pins the identity the
+  # integration client uses to mint tokens. Leave empty to fall back to the
+  # SDK's own resolution (reads DATABRICKS_CONFIG_PROFILE env var, then
+  # DATABRICKS_* env vars, then the DEFAULT profile).
+  #
+  # Precedence at runtime:
+  #   DATABRICKS_CONFIG_PROFILE env var > `auth.profile` here > SDK default
+  #
+  # Example values:
+  #   profile: "DEV"        # user-auth profile from `databricks auth login`
+  #   profile: "LAKEBASE-READER"    # a service-principal profile
+  # [UPDATE] if your DEFAULT profile isn't the identity you want tests to use.
+  profile: ""
+
+# ============================================================================
+# Auth — read by `databricks-sdk` underneath the client
+# ============================================================================
+# The async client fetches its token via the Databricks SDK, which honours
+# standard auth env vars / ~/.databrickscfg. Pick ONE of:
+#
+#   1. User OAuth profile (interactive developer):
+#        databricks auth login --host <workspace-url> --profile my-user
+#        export DATABRICKS_CONFIG_PROFILE=my-user
+#
+#   2. Service principal via env vars (CI / headless):
+#        export DATABRICKS_HOST=https://<workspace-url>
+#        export DATABRICKS_CLIENT_ID=<sp-application-id>
+#        export DATABRICKS_CLIENT_SECRET=<sp-secret>
+#
+#   3. Static Data API token:
+#        export LAKEBASE_API_TOKEN=$(databricks postgres generate-database-credential \
+#            projects/<project>/branches/<branch>/endpoints/<endpoint> \
+#            -p <profile> -o json | jq -r .token)
+#
+# Whichever identity ends up minting the token must be a provisioned Postgres
+# role with SELECT on `probe_schema.probe_table`. See docs/fix_data_api_auth.md
+# for the provisioning playbook.

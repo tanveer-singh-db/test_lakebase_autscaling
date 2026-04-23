@@ -27,6 +27,9 @@ ENV/
 *.pem
 *.key
 
+# Local test config (committed template lives next to it as .yaml.template)
+tests/test_config.yaml
+
 # Databricks CLI auth
 .databrickscfg
 

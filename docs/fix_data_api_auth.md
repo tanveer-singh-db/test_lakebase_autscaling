@@ -23,11 +23,27 @@ In the Databricks UI:
 
 This creates the `authenticator` role and the `pgrst` schema if missing.
 
-### 2. Provision the identity as a Postgres role
+### 2. Provision the identity as a Postgres role — **use SQL, not the UI**
 
-Open the **Lakebase SQL Editor** (you'll be authenticated as the owner, which
-has DDL rights) and run the template at `src/provision_data_api_role.sql`.
-Before running, replace:
+> ⚠️ The Lakebase UI's **Roles & Databases → Add Role → OAuth** flow and the
+> `databricks_create_role()` SQL function look equivalent in the docs, but
+> they are **not** for the `authenticator` delegation step. Roles created
+> via the UI do not grant the project owner ADMIN OPTION, so the follow-up
+> `GRANT "<identity>" TO authenticator` fails with SQLSTATE `42501`:
+>
+> ```
+> ERROR: permission denied to grant role "<identity>" (SQLSTATE 42501)
+> ```
+>
+> `databricks_create_role()` additionally grants the caller ADMIN on the
+> new role, which is what makes the GRANT possible. **Always provision via
+> SQL for Data API roles.** If a role was already added via the UI and
+> you're hitting 42501, drop it in the UI and recreate it with the SQL
+> template below.
+
+Open the **Lakebase SQL Editor** (authenticated as the owner, which has DDL
+rights) and run the template at `src/provision_data_api_role.sql`. Before
+running, replace:
 
 - `<IDENTITY>` — the user's email (e.g. `alice@example.com`) **or** the
   service principal's application id (UUID).
@@ -61,10 +77,10 @@ If `public` is empty, the Data API has nothing interesting to return. Run
 
 ```bash
 export LAKEBASE_API_URL="https://<lakebase-host>/api/2.0/workspace/<workspace-id>/rest/<database>"
-.venv/bin/python src/lakebase_api.py
+.venv/bin/python src/test_lakebase_api.py
 ```
 
-`src/lakebase_api.py` pulls the workspace OAuth token from the Databricks SDK
+`src/lakebase_utils/lakebase_api.py` pulls the workspace OAuth token from the Databricks SDK
 (ambient auth by default, `DATABRICKS_CONFIG_PROFILE=<name>` to pin a profile).
 Expected output is a JSON list of rows.
 
