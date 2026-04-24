@@ -1,0 +1,40 @@
+# ============================================================================
+# Runtime dependencies
+# ============================================================================
+# Pinned to the versions currently exercised in .venv; loosen or tighten as
+# needed. On DBR 16.4 LTS / Serverless most of these ship preinstalled —
+# `psycopg2` 2.9.3 is bundled, `databricks-sdk` is bundled, `requests` is
+# bundled. `aiohttp` is not; install it with `%pip install aiohttp` in a
+# notebook when using the async client.
+
+# Direct Postgres client (LakebaseAutoscalingClient)
+psycopg2-binary>=2.9.3
+
+# Sync Data API client (LakebaseDataApiClient)
+requests>=2.31.0
+
+# Async Data API client (AsyncLakebaseDataApiClient)
+aiohttp>=3.9.0
+
+# Token minting + ambient auth for all clients
+databricks-sdk>=0.30.0
+
+
+# ============================================================================
+# Test-only dependencies (install with: pip install -r requirements-dev.txt,
+# or inline for now — this repo has no split)
+# ============================================================================
+
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+aioresponses>=0.7.6
+pyyaml>=6.0
+
+
+# ============================================================================
+# Optional
+# ============================================================================
+# Needed only if you call `LakebaseAutoscalingClient.select()` outside a
+# Databricks notebook — in-notebook Spark is the bound `spark` global. Install
+# only if you really want Spark DataFrames locally:
+#   pyspark>=3.5.0
