@@ -5,7 +5,8 @@ from __future__ import annotations
 import asyncio
 import re
 import time
-from unittest.mock import patch
+from datetime import datetime, timezone
+from unittest.mock import MagicMock, patch
 
 import pytest
 from aioresponses import aioresponses
@@ -89,6 +90,30 @@ class TestAuthHeader:
         c._auth_expires_at = time.monotonic() - 1
         await c._auth_header()
         assert mock_workspace_client.config.authenticate.call_count == 2
+        await c.close()
+
+    async def test_endpoint_path_mints_jwt_via_generate_database_credential(self, clean_env, mock_workspace_client):
+        # Expire_time in the future → cached on the first mint.
+        future = MagicMock()
+        future.seconds = int(datetime.now(timezone.utc).timestamp()) + 3600
+        cred = MagicMock(token="endpoint-jwt", expire_time=future)
+        mock_workspace_client.postgres.generate_database_credential.return_value = cred
+
+        with patch("lakebase_utils._common._make_ws", return_value=mock_workspace_client):
+            c = AsyncLakebaseDataApiClient(
+                base_url=BASE,
+                auth_mode="user_oauth",
+                endpoint_path="projects/p/branches/b/endpoints/e",
+            )
+        header1 = await c._auth_header()
+        header2 = await c._auth_header()  # within TTL → same underlying token
+        assert header1["Authorization"] == "Bearer endpoint-jwt"
+        assert header2["Authorization"] == "Bearer endpoint-jwt"
+        # generate_database_credential called exactly once; authenticate() never.
+        mock_workspace_client.postgres.generate_database_credential.assert_called_once_with(
+            endpoint="projects/p/branches/b/endpoints/e",
+        )
+        mock_workspace_client.config.authenticate.assert_not_called()
         await c.close()
 
 

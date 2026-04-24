@@ -97,6 +97,18 @@ Mermaid diagrams and the full explanation live in
    `host=...` locally is fine, but the client wrappers in this repo
    already pass only truthy kwargs via `_make_ws`.
 
+7. **Data API clients need `endpoint_path` in notebook context.** The
+   notebook runtime's ambient credential (what
+   `WorkspaceClient().config.authenticate()` returns) is **not** a JWT,
+   and PostgREST replies `HTTP 400 "Provided authentication token is
+   not a valid JWT encoding"`. Always pass
+   `endpoint_path="projects/<p>/branches/<b>/endpoints/<e>"` when
+   constructing `LakebaseDataApiClient` / `AsyncLakebaseDataApiClient`
+   from a notebook — it switches the auth to
+   `w.postgres.generate_database_credential(endpoint=...)` which returns
+   a real JWT. Harmless for SP M2M / CLI-profile auth, so safe to always
+   set.
+
 ## Dev / test commands
 
 ```bash

@@ -4,6 +4,7 @@ refactor. Locks down URL/auth behaviour and paginate semantics.
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -98,3 +99,60 @@ class TestSyncPaginate:
         ])
         rows = c.fetch_all("public", "t", page_size=2)
         assert rows == [{"id": 1}, {"id": 2}]
+
+
+class TestSyncEndpointPathAuth:
+    """`endpoint_path` makes the client mint a JWT via
+    `WorkspaceClient.postgres.generate_database_credential`, which is required
+    under Databricks notebook ambient auth."""
+
+    def test_endpoint_path_uses_generate_database_credential(self, clean_env, mock_workspace_client):
+        cred = MagicMock(token="endpoint-jwt-token", expire_time=None)
+        mock_workspace_client.postgres.generate_database_credential.return_value = cred
+
+        with patch("lakebase_utils._common._make_ws", return_value=mock_workspace_client):
+            c = LakebaseDataApiClient(
+                base_url="https://x",
+                auth_mode="user_oauth",
+                endpoint_path="projects/p/branches/b/endpoints/e",
+            )
+        with patch.object(c._session, "get", return_value=_mock_response([])) as get:
+            c.get("public", "t")
+
+        mock_workspace_client.postgres.generate_database_credential.assert_called_once_with(
+            endpoint="projects/p/branches/b/endpoints/e",
+        )
+        # config.authenticate() must NOT be called when endpoint_path is present.
+        mock_workspace_client.config.authenticate.assert_not_called()
+        assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer endpoint-jwt-token"
+
+    def test_endpoint_path_caches_until_expiring(self, clean_env, mock_workspace_client):
+        # Credential with no expire_time → always considered expiring → re-mint per call.
+        # Give it an expire_time far in the future to verify caching.
+        future = MagicMock()
+        future.seconds = int(datetime.now(timezone.utc).timestamp()) + 3600
+        cred = MagicMock(token="cached-token", expire_time=future)
+        mock_workspace_client.postgres.generate_database_credential.return_value = cred
+
+        with patch("lakebase_utils._common._make_ws", return_value=mock_workspace_client):
+            c = LakebaseDataApiClient(
+                base_url="https://x",
+                auth_mode="user_oauth",
+                endpoint_path="projects/p/branches/b/endpoints/e",
+            )
+
+        with patch.object(c._session, "get", return_value=_mock_response([])):
+            c.get("public", "t")
+            c.get("public", "t")
+            c.get("public", "t")
+        assert mock_workspace_client.postgres.generate_database_credential.call_count == 1
+
+    def test_without_endpoint_path_falls_back_to_authenticate(self, clean_env, mock_workspace_client):
+        with patch("lakebase_utils._common._make_ws", return_value=mock_workspace_client):
+            c = LakebaseDataApiClient(base_url="https://x", auth_mode="user_oauth")
+        with patch.object(c._session, "get", return_value=_mock_response([])) as get:
+            c.get("public", "t")
+
+        mock_workspace_client.config.authenticate.assert_called()
+        mock_workspace_client.postgres.generate_database_credential.assert_not_called()
+        assert get.call_args.kwargs["headers"]["Authorization"] == "Bearer mocked-sdk-token"

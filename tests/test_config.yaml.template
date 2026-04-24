@@ -21,6 +21,17 @@ lakebase:
   # [UPDATE] or override via the LAKEBASE_API_URL env var.
   api_url: ""
 
+  # Endpoint path in the form:
+  #   projects/<project-id>/branches/<branch-id>/endpoints/<endpoint-id>
+  # Listed on the project's **Compute** tab. Required when running the tests
+  # (or the client) from a Databricks notebook — ambient notebook auth
+  # produces a non-JWT session credential that PostgREST rejects; the client
+  # switches to `w.postgres.generate_database_credential(endpoint=...)`
+  # (which returns a real JWT) when this path is set.
+  # Harmless for SP M2M / user-OAuth from a CLI profile.
+  # [UPDATE] or override via the LAKEBASE_ENDPOINT_PATH env var.
+  endpoint_path: ""
+
   # Schema + table used by the live smoke tests to verify reads.
   # Must be a schema that's exposed in Data API → Settings → Exposed schemas,
   # and a table the authenticated identity has SELECT on.

@@ -79,6 +79,16 @@ Pick a mode via `auth_mode`:
 
 For `user_oauth` and `sp_oauth`, the SDK handles token refresh internally — use those for anything that runs longer than an hour.
 
+**Notebook gotcha — pass `endpoint_path`.** In a Databricks notebook, `WorkspaceClient().config.authenticate()` returns the runtime's session credential, which isn't a JWT and gets rejected by PostgREST with `HTTP 400 "Provided authentication token is not a valid JWT encoding"`. Set `endpoint_path="projects/<p>/branches/<b>/endpoints/<e>"` and the client will mint a JWT via `w.postgres.generate_database_credential(endpoint=...)` instead. The kwarg is harmless for SP M2M / user-OAuth from a CLI profile (those already produce JWTs), so it's safe to always set it.
+
+```python
+LakebaseDataApiClient(
+    base_url="...",
+    auth_mode="user_oauth",
+    endpoint_path="projects/my-proj/branches/production/endpoints/primary",  # required in notebooks
+)
+```
+
 ## Methods
 
 ### `get(schema, table, params=None, timeout=None)`

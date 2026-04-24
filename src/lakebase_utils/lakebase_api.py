@@ -16,11 +16,15 @@ elevated roles.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Iterator
 
 import requests
 
 from ._common import resolve_auth, resolve_base_url
+
+
+_REFRESH_MARGIN = timedelta(minutes=5)
 
 
 class LakebaseDataApiClient:
@@ -39,6 +43,15 @@ class LakebaseDataApiClient:
                       (omit in a notebook — ambient auth is automatic).
         sp_oauth:     SDK-based service-principal M2M; requires
                       `client_id` + `client_secret` [+ `workspace_host`].
+
+    `endpoint_path` is required for notebook-ambient auth:
+    `WorkspaceClient().config.authenticate()` in a notebook returns the
+    runtime's session credential, which is NOT a JWT and fails the Data
+    API's validation ("Provided authentication token is not a valid JWT
+    encoding"). Setting `endpoint_path` tells the client to mint a proper
+    JWT via `w.postgres.generate_database_credential(endpoint=...)` instead.
+    It's optional for SP M2M and user OAuth from a CLI profile — those
+    already produce JWTs through `config.authenticate()`.
 
     Methods:
       get(schema, table, params=None)            -> list[dict]   (one page)
@@ -61,6 +74,8 @@ class LakebaseDataApiClient:
         workspace_host: str | None = None,
         client_id: str | None = None,
         client_secret: str | None = None,
+        # Required when running under notebook ambient auth — see class docstring.
+        endpoint_path: str | None = None,
         default_page_size: int = 1000,
         timeout: int = 30,
     ):
@@ -71,6 +86,8 @@ class LakebaseDataApiClient:
             token=token, profile=profile, workspace_host=workspace_host,
             client_id=client_id, client_secret=client_secret,
         )
+        self._endpoint_path = endpoint_path
+        self._cached_cred = None  # DatabaseCredential with .token / .expire_time
         self._default_page_size = default_page_size
         self._timeout = timeout
         self._session = requests.Session()
@@ -78,7 +95,29 @@ class LakebaseDataApiClient:
     def _token(self) -> str:
         if self._static_token:
             return self._static_token
+        if self._endpoint_path:
+            return self._endpoint_scoped_token()
         return self._ws.config.authenticate()["Authorization"].split(" ", 1)[1]
+
+    def _endpoint_scoped_token(self) -> str:
+        """Mint a JWT via `generate_database_credential`, cached until near expiry."""
+        if self._cached_cred is None or self._is_expiring(self._cached_cred):
+            self._cached_cred = self._ws.postgres.generate_database_credential(
+                endpoint=self._endpoint_path,
+            )
+        return self._cached_cred.token
+
+    @staticmethod
+    def _is_expiring(cred) -> bool:
+        exp = getattr(cred, "expire_time", None)
+        if exp is None:
+            return True
+        # SDK returns a proto-style Timestamp with `.seconds`; accept datetime too.
+        if hasattr(exp, "seconds"):
+            exp = datetime.fromtimestamp(exp.seconds, tz=timezone.utc)
+        elif exp.tzinfo is None:
+            exp = exp.replace(tzinfo=timezone.utc)
+        return exp - datetime.now(timezone.utc) <= _REFRESH_MARGIN
 
     def _headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token()}", "Accept": "application/json"}

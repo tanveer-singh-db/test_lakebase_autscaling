@@ -76,12 +76,14 @@ Run [`src/create_widgets.sql`](../src/create_widgets.sql) from the SQL Editor as
 **How do I test the Data API from a Databricks notebook?**
 1. `%pip install requests` (and `aiohttp` if you want the async client).
 2. Paste the **Data API → API URL** into a variable — no CLI profile needed, the notebook has ambient auth.
-3. Use the sync client:
+3. Use the sync client — you **must** pass `endpoint_path` in a notebook (otherwise PostgREST returns `HTTP 400 "Provided authentication token is not a valid JWT encoding"`; notebook ambient auth produces a non-JWT session credential):
    ```python
    from lakebase_utils.lakebase_api import LakebaseDataApiClient
    with LakebaseDataApiClient(
        base_url="https://ep-xxxx.../api/2.0/workspace/<ws>/rest/<db>",
-       # no auth kwargs — WorkspaceClient() picks up notebook auth automatically
+       auth_mode="user_oauth",
+       endpoint_path="projects/<proj>/branches/<branch>/endpoints/<endpoint>",
+       # no profile / workspace_host — WorkspaceClient() picks up notebook auth automatically
    ) as c:
        display(c.fetch_all("public", "widgets"))
    ```

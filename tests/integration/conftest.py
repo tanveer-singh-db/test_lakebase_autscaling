@@ -29,6 +29,7 @@ def integration_config() -> dict:
 
     lb = cfg.setdefault("lakebase", {})
     lb["api_url"] = os.environ.get("LAKEBASE_API_URL") or lb.get("api_url") or ""
+    lb["endpoint_path"] = os.environ.get("LAKEBASE_ENDPOINT_PATH") or lb.get("endpoint_path") or ""
     lb.setdefault("probe_schema", "public")
     lb.setdefault("probe_table", "databricks_list_roles")
 
@@ -50,6 +51,10 @@ async def async_client(integration_config) -> AsyncLakebaseDataApiClient:
         # auth_mode stays None (auto) — the client uses SDK-backed auth
         # because no static token is present.
         kwargs["profile"] = profile
+    endpoint_path = integration_config["lakebase"].get("endpoint_path")
+    if endpoint_path:
+        # Required under notebook ambient auth; harmless otherwise.
+        kwargs["endpoint_path"] = endpoint_path
 
     client = AsyncLakebaseDataApiClient(**kwargs)
     try:

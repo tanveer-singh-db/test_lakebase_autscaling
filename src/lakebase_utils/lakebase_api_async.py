@@ -17,6 +17,7 @@ import asyncio
 import json
 import random
 import time
+from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, AsyncIterator
 
@@ -27,6 +28,19 @@ from ._common import resolve_auth, resolve_base_url
 
 _RETRYABLE_STATUSES: tuple[int, ...] = (408, 425, 429, 500, 502, 503, 504)
 _AUTH_CACHE_TTL_SECONDS = 600.0  # 10 min; SDK refreshes internally as needed
+_CRED_REFRESH_MARGIN = timedelta(minutes=5)
+
+
+def _cred_is_expiring(cred) -> bool:
+    """True if a `DatabaseCredential` is within 5 min of its `expire_time`."""
+    exp = getattr(cred, "expire_time", None)
+    if exp is None:
+        return True
+    if hasattr(exp, "seconds"):
+        exp = datetime.fromtimestamp(exp.seconds, tz=timezone.utc)
+    elif exp.tzinfo is None:
+        exp = exp.replace(tzinfo=timezone.utc)
+    return exp - datetime.now(timezone.utc) <= _CRED_REFRESH_MARGIN
 
 
 class LakebaseDataApiError(Exception):
@@ -148,6 +162,9 @@ class AsyncLakebaseDataApiClient:
         workspace_host: str | None = None,
         client_id: str | None = None,
         client_secret: str | None = None,
+        # Required when running under notebook ambient auth — see sync client
+        # docstring for why `config.authenticate()` alone isn't enough there.
+        endpoint_path: str | None = None,
         # Resilience
         max_concurrency: int = 10,
         max_requests_per_second: float | None = None,
@@ -166,6 +183,8 @@ class AsyncLakebaseDataApiClient:
             token=token, profile=profile, workspace_host=workspace_host,
             client_id=client_id, client_secret=client_secret,
         )
+        self._endpoint_path = endpoint_path
+        self._cached_cred = None  # DatabaseCredential with .token / .expire_time
 
         self._max_attempts = max_attempts
         self._base_backoff = base_backoff
@@ -194,6 +213,21 @@ class AsyncLakebaseDataApiClient:
                 "Accept": "application/json",
             }
         async with self._token_lock:
+            # Endpoint-scoped credential produces a proper JWT — required for
+            # notebook ambient auth (which otherwise returns a non-JWT session
+            # credential that PostgREST rejects).
+            if self._endpoint_path:
+                if self._cached_cred is None or _cred_is_expiring(self._cached_cred):
+                    self._cached_cred = await asyncio.to_thread(
+                        self._ws.postgres.generate_database_credential,
+                        endpoint=self._endpoint_path,
+                    )
+                return {
+                    "Authorization": f"Bearer {self._cached_cred.token}",
+                    "Accept": "application/json",
+                }
+            # Fallback: the SDK's current workspace bearer. Only works outside
+            # notebooks (SP M2M, user-OAuth CLI profile).
             now = time.monotonic()
             if self._cached_auth_header and now < self._auth_expires_at:
                 return self._cached_auth_header
